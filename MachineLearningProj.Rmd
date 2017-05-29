@@ -1,0 +1,122 @@
+---
+title: "R Notebook - ML coursera project - Swapnil Awasthi"
+output:
+  html_document: default
+  The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har
+  html_notebook: default
+  pdf_document: default
+---
+Importing data from the given URLs
+```{r}
+library('caret')
+library('rpart')
+library('randomForest')
+
+trngurl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testurl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+trng <- read.csv(trngurl, na.strings =c("NA","#DIV/0!", ""))
+test <- read.csv(testurl, na.strings =c("NA","#DIV/0!", ""))
+```
+Data cleaning and partition
+```{r}
+#removing the columns having NAs - since our dataset is very high dimensional
+trngnonzero <- trng[,colSums(is.na(trng)) == 0]
+testnonzero <- test[,colSums(is.na(test)) == 0]
+
+#removing non relevant columns such as time stamps, dates, serial numbers etc
+trngrelcols <- trngnonzero[,-c(1:7)]
+testrelcols <- testnonzero[,-c(1:7)]
+
+#data partitioning - the test set here is created from training set - serves as validation set
+sample <- createDataPartition(y= trngrelcols$classe, p = 0.70, list = F)
+trngset <- trngrelcols[sample,]
+testset <- trngrelcols[-sample,]
+dim(trngset)
+```
+Training and predictions
+Recursive Partition
+```{r}
+# recursive partition
+model1 <- rpart(classe ~ ., data=trngset, method="class")
+prediction1 <- predict(model1, testset, type = "class")
+confusionMatrix(testset$classe, prediction1)
+```
+Here, we can see that our rpart model has acheived an accuracy of around 75%. Now let us try and improve it using other models and techniques.
+
+Random Forest
+```{r}
+# random forest
+model2 <- randomForest(classe ~ ., data=trngset, method="class")
+prediction2 <- predict(model2, testset, type = "class")
+confusionMatrix(testset$classe, prediction2)
+```
+Here, we can see that our random forest has done pretty well with an accuracy of 99.54%.
+Since our dataset has high number of columns, we can try improving this by reducing the columns by keeping only relevant columns.
+
+Random Forest with reduced dimensionality
+
+```{r}
+# reducing dimensionality of dataset by removing the less contributing columns
+#saving our target variables for later use
+ycol <- trngset$classe
+ycoltest <- testset$classe
+nzv <- nearZeroVar(trngset, saveMetrics = TRUE)
+#print(paste('Range:',range(nzv$percentUnique)))
+head(nzv)
+```
+```{r}
+#sort by percentUnique
+sort(nzv$percentUnique, decreasing = TRUE)
+```
+Selecting columns having percent unique greater than 5 - since the number of columns are high, there is a possibility that not all the columns are important and relevant.
+The "percent of unique values'' is the number of unique values divided by the total number of samples (times 100) that approaches zero as the granularity of the data increases.
+```{r}
+#selecting column having unique percent greater than 5
+pcacols <- trngset[c(rownames(nzv[nzv$percentUnique > 5,]))]
+pcacolstest <- testset[c(rownames(nzv[nzv$percentUnique > 5,]))]
+
+#adding the target variable back to the dataset
+pcacols$classe <- ycol
+pcacolstest$classe <- ycoltest
+dim(pcacols)
+dim(pcacolstest)
+```
+Predicting after reducing the dimension of the dataset
+
+```{r}
+pcamodel <- randomForest(classe ~ ., data=pcacols, method="class")
+prediction3 <- predict(pcamodel, pcacolstest, type = "class")
+confusionMatrix(pcacolstest$classe, prediction3)
+```
+We can see that there is marginal improvement in the accuracy although we have used less number of columns(26 columns as compared to 53 used in random forest(model2). There is a scope for reducing the columns further and checking how does the accuracy varies.
+
+Final prediction on the test data downloaded from the URL provided.
+I have considered only the columns with a variance threshold, this can be played upon further.
+```{r}
+testds <- testrelcols[c(rownames(nzv[nzv$percentUnique > 5,]))]
+finalpred <- predict(pcamodel, testds, type = "class")
+finalpred
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
